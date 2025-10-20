@@ -1,0 +1,17 @@
+@echo OFF
+SETLOCAL
+SET "TARGET_DIR=%~1"
+IF "%TARGET_DIR%"=="" (
+    ECHO Usage: %~nx0 "PATH_TO_DIRECTORY"
+    EXIT /B 1
+)
+IF NOT EXIST "%TARGET_DIR%" (
+    ECHO Directory "%TARGET_DIR%" does not exist.
+    EXIT /B 0
+)
+SET "TEMP_DIR=%TEMP%\empty_dir_%RANDOM%"
+MKDIR "%TEMP_DIR%" >NUL 2>NUL
+ROBOCOPY "%TEMP_DIR%" "%TARGET_DIR%" /MIR >NUL
+RMDIR /S /Q "%TARGET_DIR%"
+RMDIR /S /Q "%TEMP_DIR%"
+ENDLOCAL
