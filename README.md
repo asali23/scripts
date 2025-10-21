@@ -1,6 +1,14 @@
 # Utility Scripts
 
-Helper scripts for Windows cleanup, Git maintenance, and SSH onboarding.
+Helper scripts for Windows cleanup, Linux system maintenance, Git maintenance, and SSH onboarding.
+
+## Linux
+
+Shell scripts live under the `linux/` directory.
+
+| Tool | Language(s) | Description |
+| :--- | :--- | :--- |
+| [Disk Space Analyzer](./linux/README-disk-analyzer.md) | Bash | Comprehensive disk space analysis tool that identifies space-saving opportunities across different Linux distributions (Debian/Ubuntu, RHEL/Fedora, Arch, openSUSE). Detects large packages, old kernels, caches, logs, containers, and provides distribution-specific cleanup suggestions. |
 
 ## Windows
 
