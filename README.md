@@ -8,7 +8,8 @@ Shell scripts live under the `linux/` directory.
 
 | Tool | Language(s) | Description |
 | :--- | :--- | :--- |
-| [Disk Space Analyzer](./linux/README-disk-analyzer.md) | Bash | Comprehensive disk space analysis tool that identifies space-saving opportunities across different Linux distributions (Debian/Ubuntu, RHEL/Fedora, Arch, openSUSE). Detects large packages, old kernels, caches, logs, containers, and provides distribution-specific cleanup suggestions. |
+| [Disk Space Analyzer](./linux/disk-analyzer.md) | Bash | Comprehensive disk space analysis tool that identifies space-saving opportunities across different Linux distributions (Debian/Ubuntu, RHEL/Fedora, Arch, openSUSE). Detects large packages, old kernels, caches, logs, containers, and provides distribution-specific cleanup suggestions. |
+| [ctop Installer](./linux/install-ctop.md) | Bash | Enhanced installer for ctop (Container Top) with multi-architecture support, multiple package managers, SHA256 checksum verification, and user-level installation option. Supports x86_64, ARM64, and ARM systems. |
 
 ## Windows
 
