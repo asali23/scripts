@@ -1,131 +1,91 @@
-# ctop Installation Script
+# ctop Installer
 
-A comprehensive installer for [ctop](https://github.com/bcicen/ctop) (Container Top) with multiple installation methods, architecture detection, and security features.
+## Purpose
+The purpose of this script is to automate the installation of ctop, a popular tool for monitoring container metrics, while ensuring security through checksum verification.
 
-## Features
+Automated installation script for ctop, a top-like interface for container metrics.
 
-- **Multi-architecture support**: Automatically detects and installs the correct binary for x86_64, ARM64, and ARM systems
-- **Multiple package managers**: Tries to install via system package manager first (DNF, APT, Pacman, Zypper, APK, Homebrew)
-- **SHA256 checksum verification**: Downloads and verifies checksums for security
-- **User-level installation**: Install to `~/.local/bin` without requiring sudo privileges
-- **Smart version checking**: Detects existing installations and prevents duplicate installs
-- **Colored output**: Clear status messages with color-coded logging
-- **Uninstall functionality**: Clean removal of ctop from system
-- **Comprehensive error handling**: Validates dependencies and provides helpful error messages
+## Script
+
+- [`install-ctop.sh`](./install-ctop.sh)
+
+## Description
+
+This script downloads and installs ctop from the official GitHub releases. It supports both system-wide and user-level installation, includes SHA256 checksum verification for security, and provides uninstall functionality.
+
+## What it does
+
+- x86_64 architecture support
+- SHA256 checksum verification for security
+- User-level installation (no sudo required)
+- System-wide installation option
+- Smart version checking
+- Uninstall functionality
+- Automatic latest version detection from GitHub releases
 
 ## Usage
 
-### Basic Installation
+### Basic Installation (System-wide)
 
 ```bash
-# System-wide installation (requires sudo)
 ./install-ctop.sh
+```
 
-# User installation (no sudo required)
+### User Installation (No sudo required)
+
+```bash
 ./install-ctop.sh --user
 ```
 
-### Options
-
-| Option | Description |
-|--------|-------------|
-| `-h, --help` | Show help message |
-| `-u, --user` | Install to user directory (~/.local/bin) without sudo |
-| `--uninstall` | Uninstall ctop |
-
-### Examples
+### Uninstall
 
 ```bash
-# Install ctop system-wide (default)
-./install-ctop.sh
-
-# Install to user directory (no sudo needed)
-./install-ctop.sh --user
-
-# Uninstall ctop
 ./install-ctop.sh --uninstall
 ```
 
-## Installation Methods
+### Show Help
 
-The script tries multiple installation methods in order:
+```bash
+./install-ctop.sh --help
+```
 
-1. **Package Manager** (if sudo available and system install):
-   - DNF (Fedora, RHEL, CentOS)
-   - APT (Debian, Ubuntu)
-   - Pacman (Arch Linux)
-   - Zypper (openSUSE)
-   - APK (Alpine Linux)
-   - Homebrew (Linux)
+## Options
 
-2. **Binary Installation** (fallback):
-   - Downloads latest release from GitHub
-   - Detects system architecture automatically
-   - Verifies SHA256 checksum
-   - Installs to `/usr/local/bin` (system) or `~/.local/bin` (user)
+- `-h, --help` - Show help message
+- `-u, --user` - Install to user directory (~/.local/bin) without sudo
+- `--uninstall` - Uninstall ctop
+
+## Installation Locations
+
+- **System-wide**: `/usr/local/bin/ctop` (requires sudo)
+- **User-level**: `~/.local/bin/ctop` (no sudo required)
 
 ## Requirements
 
-- `curl` - Required for downloading files
-- `jq` - Optional, for better JSON parsing (falls back to grep/cut if not available)
-- `sha256sum` - For checksum verification
+- x86_64 architecture
+- curl or wget for downloading
+- Internet connection
+- sudo privileges (for system-wide installation only)
+
+## Example Output
+
+```
+[INFO] Detecting architecture...
+[INFO] Fetching latest ctop release...
+[INFO] Latest version: v0.7.7
+[INFO] Downloading ctop...
+[INFO] Verifying checksum...
+[SUCCESS] Checksum verification passed
+[INFO] Installing to /usr/local/bin/ctop...
+[SUCCESS] ctop v0.7.7 installed successfully!
+```
 
 ## Security
 
-- Validates checksums when available from GitHub releases
-- Uses HTTPS for all downloads
-- Temporary files are cleaned up on success or failure
-- Clear error messages if checksum verification fails
+The script verifies the SHA256 checksum of the downloaded binary to ensure integrity and authenticity before installation.
 
-## Architecture Support
+## Notes
 
-- **x86_64/amd64**: Standard Intel/AMD 64-bit systems
-- **aarch64/arm64**: ARM 64-bit systems (Raspberry Pi 4, Apple Silicon via Linux, etc.)
-- **armv7l/arm**: ARM 32-bit systems (older Raspberry Pi models)
-
-## Troubleshooting
-
-### Already Installed
-
-If ctop is already installed, the script will display:
-
-```
-[SUCCESS] ctop is already installed
-[INFO] Version: x.x.x
-[INFO] Location: /path/to/ctop
-[INFO] Use --uninstall to remove it
-```
-
-### No Sudo Access
-
-For system-wide installation without sudo, the script will suggest:
-
-```
-[ERROR] This script requires sudo privileges for system installation
-[ERROR] Use --user flag to install to user directory instead
-```
-
-### User Installation PATH
-
-If installing to user directory and `~/.local/bin` is not in your PATH:
-
-```
-[WARNING] Add /home/user/.local/bin to your PATH to use ctop:
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-Add this to your `~/.bashrc` or `~/.zshrc` to make it permanent.
-
-## What is ctop?
-
-ctop is a top-like interface for container metrics. It provides:
-
-- Real-time metrics for running containers
-- CPU, memory, network, and disk I/O stats
-- Container lifecycle management (start, stop, remove)
-- Support for Docker and other container runtimes
-- Clean, interactive terminal UI
-
-## License
-
-This installation script is provided as-is. ctop itself is licensed under the MIT License.
+- For user installation, ensure `~/.local/bin` is in your PATH
+- The script automatically detects the latest version from GitHub releases
+- ctop provides a real-time overview of Docker and other container metrics

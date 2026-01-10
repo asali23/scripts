@@ -1,15 +1,13 @@
 #!/bin/bash
 
-# ctop Installation Script - Enhanced Version
-# A comprehensive installer for ctop (container top) with multiple installation methods
+# ctop Installation Script
+# Installer for ctop (container top)
 # 
 # FEATURES:
-# - Multi-architecture support (x86_64, ARM64, ARM)
-# - Multiple package managers (DNF, APT, Pacman, Zypper, APK, Homebrew)
+# - x86_64 architecture support
 # - SHA256 checksum verification for security
 # - User-level installation (no sudo required)
 # - Smart version checking
-# - Comprehensive error handling
 # - Uninstall functionality
 #
 # USAGE:
@@ -97,62 +95,6 @@ parse_args() {
     done
 }
 
-# Detect system architecture
-detect_arch() {
-    local arch=$(uname -m)
-    case $arch in
-        x86_64|amd64)
-            echo "linux-amd64"
-            ;;
-        aarch64|arm64)
-            echo "linux-arm64"
-            ;;
-        armv7l|arm)
-            echo "linux-arm"
-            ;;
-        *)
-            log_error "Unsupported architecture: $arch"
-            return 1
-            ;;
-    esac
-}
-
-# Detect OS and package manager
-detect_os() {
-    if [[ -f /etc/os-release ]]; then
-        . /etc/os-release
-        echo "$ID"
-    else
-        log_error "Cannot detect OS"
-        return 1
-    fi
-}
-
-# Check dependencies
-check_dependencies() {
-    local missing_deps=()
-    
-    if ! command -v curl >/dev/null 2>&1; then
-        missing_deps+=("curl")
-    fi
-    
-    if [[ ${#missing_deps[@]} -gt 0 ]]; then
-        log_error "Missing required dependencies: ${missing_deps[*]}"
-        log_error "Please install them first:"
-        for dep in "${missing_deps[@]}"; do
-            echo "  - $dep"
-        done
-        return 1
-    fi
-    
-    # Check if jq is available for better JSON parsing
-    if command -v jq >/dev/null 2>&1; then
-        return 0
-    else
-        return 0
-    fi
-}
-
 # Check if ctop is already installed
 check_existing_installation() {
     if command -v ctop >/dev/null 2>&1; then
@@ -169,8 +111,13 @@ check_existing_installation() {
 
 # Get latest release info from GitHub
 get_latest_release_info() {
-    local arch="$1"
     local api_url="https://api.github.com/repos/$CTOP_REPO/releases/latest"
+    
+    # Check if curl is available
+    if ! command -v curl >/dev/null 2>&1; then
+        log_error "curl is required but not installed"
+        return 1
+    fi
     
     local response
     if ! response=$(curl -s "$api_url"); then
@@ -183,17 +130,16 @@ get_latest_release_info() {
     
     if command -v jq >/dev/null 2>&1; then
         # Use jq for proper JSON parsing
-        download_url=$(echo "$response" | jq -r ".assets[] | select(.name | contains(\"$arch\")) | .browser_download_url" | head -n1)
-        # Try to find checksum file
+        download_url=$(echo "$response" | jq -r '.assets[] | select(.name | contains("linux-amd64")) | .browser_download_url' | head -n1)
         checksum_url=$(echo "$response" | jq -r '.assets[] | select(.name | contains("sha256") or contains("checksums")) | .browser_download_url' | head -n1)
     else
         # Fallback to grep/cut
-        download_url=$(echo "$response" | grep -o "\"browser_download_url\"[^}]*$arch[^\"]*" | cut -d'"' -f4 | head -n1)
-        checksum_url=$(echo "$response" | grep -o "\"browser_download_url\"[^}]*\(sha256\|checksums\)[^\"]*" | cut -d'"' -f4 | head -n1)
+        download_url=$(echo "$response" | grep -o '"browser_download_url"[^}]*linux-amd64[^"]*' | cut -d'"' -f4 | head -n1)
+        checksum_url=$(echo "$response" | grep -o '"browser_download_url"[^}]*\(sha256\|checksums\)[^"]*' | cut -d'"' -f4 | head -n1)
     fi
     
     if [[ -z "$download_url" ]]; then
-        log_error "Could not find download URL for architecture: $arch"
+        log_error "Could not find download URL for linux-amd64"
         return 1
     fi
     
@@ -244,15 +190,8 @@ verify_checksum() {
 
 # Install ctop binary
 install_ctop_binary() {
-    local arch
-    if ! arch=$(detect_arch); then
-        return 1
-    fi
-    
-    log "Detecting architecture: $arch"
-    
     local release_info
-    if ! release_info=$(get_latest_release_info "$arch"); then
+    if ! release_info=$(get_latest_release_info); then
         return 1
     fi
     
@@ -324,86 +263,6 @@ install_ctop_binary() {
     fi
 }
 
-# Try package manager installation
-try_package_manager() {
-    local os_id="$1"
-    
-    # Skip if user installation requested
-    if [[ "$USER_INSTALL" == "true" ]]; then
-        return 1
-    fi
-    
-    # Skip if no sudo access
-    if ! sudo -n true 2>/dev/null; then
-        return 1
-    fi
-    
-    log "Trying package manager installation..."
-    
-    # DNF (Fedora, RHEL, CentOS)
-    if command -v dnf >/dev/null 2>&1; then
-        if sudo dnf list available ctop >/dev/null 2>&1; then
-            log "Installing ctop via DNF..."
-            if sudo dnf install -y ctop; then
-                return 0
-            fi
-        fi
-    fi
-    
-    # APT (Debian, Ubuntu)
-    if command -v apt >/dev/null 2>&1; then
-        if sudo apt-cache show ctop >/dev/null 2>&1; then
-            log "Installing ctop via APT..."
-            sudo apt update >/dev/null 2>&1
-            if sudo apt install -y ctop; then
-                return 0
-            fi
-        fi
-    fi
-    
-    # Pacman (Arch Linux)
-    if command -v pacman >/dev/null 2>&1; then
-        if pacman -Si ctop >/dev/null 2>&1; then
-            log "Installing ctop via Pacman..."
-            if sudo pacman -S --noconfirm ctop; then
-                return 0
-            fi
-        fi
-    fi
-    
-    # Zypper (openSUSE)
-    if command -v zypper >/dev/null 2>&1; then
-        if zypper search ctop >/dev/null 2>&1; then
-            log "Installing ctop via Zypper..."
-            if sudo zypper install -y ctop; then
-                return 0
-            fi
-        fi
-    fi
-    
-    # APK (Alpine)
-    if command -v apk >/dev/null 2>&1; then
-        if apk search ctop | grep -q ctop; then
-            log "Installing ctop via APK..."
-            if sudo apk add ctop; then
-                return 0
-            fi
-        fi
-    fi
-    
-    # Homebrew (Linux)
-    if command -v brew >/dev/null 2>&1; then
-        if brew search ctop | grep -q ctop; then
-            log "Installing ctop via Homebrew..."
-            if brew install ctop; then
-                return 0
-            fi
-        fi
-    fi
-    
-    return 1
-}
-
 # Uninstall ctop
 uninstall_ctop() {
     log "Uninstalling ctop..."
@@ -456,34 +315,17 @@ main() {
     
     log "ctop Installation Script v$VERSION"
     
-    # Check dependencies
-    if ! check_dependencies; then
-        exit 1
-    fi
-    
-    # Detect OS
-    local os_id
-    if ! os_id=$(detect_os); then
-        exit 1
-    fi
-    
     # Check existing installation
     if check_existing_installation; then
         exit 0
     fi
     
-    # Try package manager first
-    if try_package_manager "$os_id"; then
-        log_success "ctop installed successfully via package manager"
+    # Install binary
+    if install_ctop_binary; then
+        log_success "ctop installed successfully"
     else
-        # Fallback to binary installation
-        log "Package manager installation failed or unavailable, trying binary installation..."
-        if install_ctop_binary; then
-            log_success "ctop installed successfully via binary download"
-        else
-            log_error "All installation methods failed"
-            exit 1
-        fi
+        log_error "Installation failed"
+        exit 1
     fi
     
     # Verify installation
