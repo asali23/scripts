@@ -4,12 +4,12 @@ This repository contains a collection of scripts for automating common developme
 
 ## Available Tools
 
-- [Containers](./containers/README.md)
-- [Git](./git/README.md)
-- [Linux](./linux/README.md)
-- [SSH](./ssh/README.md)
-- [VSCode](./vscode/README.md)
-- [Windows](./windows/README.md)
+- [Container Utilities](./containers/README.md)
+- [Git Utilities](./git/README.md)
+- [Linux Utilities](./linux/README.md)
+- [SSH Utilities](./ssh/README.md)
+- [VSCode Templates](./vscode/README.md)
+- [Windows Utilities](./windows/README.md)
 
 ## Contributing
 
