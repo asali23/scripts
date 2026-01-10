@@ -1,43 +1,13 @@
 # Utility Scripts
 
-Helper scripts for Windows cleanup, Linux system maintenance, Git maintenance, and SSH onboarding.
+This repository contains a collection of scripts for automating common development and operational tasks. Each directory contains a self-contained tool with its own documentation.
 
-## Linux
+## Available Tools
 
-Shell scripts live under the `linux/` directory.
-
-| Tool | Language(s) | Description |
-| :--- | :--- | :--- |
-| [Disk Space Analyzer](./linux/disk-analyzer.md) | Bash | Comprehensive disk space analysis tool that identifies space-saving opportunities across different Linux distributions (Debian/Ubuntu, RHEL/Fedora, Arch, openSUSE). Detects large packages, old kernels, caches, logs, containers, and provides distribution-specific cleanup suggestions. |
-| [ctop Installer](./linux/install-ctop.md) | Bash | Enhanced installer for ctop (Container Top) with multi-architecture support, multiple package managers, SHA256 checksum verification, and user-level installation option. Supports x86_64, ARM64, and ARM systems. |
-| [htop Installer](./linux/install-htop.md) | Bash | Robust cross-distribution installer for htop with automatic OS detection, package manager lock handling, EPEL repository management for RHEL-based systems, and color-coded output. Supports 20+ Linux distributions including Debian, Ubuntu, RHEL, CentOS, Fedora, Arch, openSUSE, Alpine, and their derivatives. |
-
-## Windows
-
-Batch files live under the `windows/` directory.
-
-| Tool | Language(s) | Description |
-| :--- | :--- | :--- |
-| [Delete Directory](./windows/delete_directory.md) | Batch | Purges directories with deeply nested or long paths by mirroring an empty temp folder before removal. |
-| [Delete Old System Directory](./windows/delete_old_system_directory.md) | Batch | Takes ownership of `Windows.old` (or similar) and removes it after an OS upgrade. |
-| [Delete MS Teams App Data](./windows/delete_ms_teams_app_data.md) | Batch | Clears the Microsoft Teams cache by reusing the Delete Directory tool. |
-
-## Git
-
-Shell scripts live under the `git/` directory.
-
-| Tool | Language(s) | Description |
-| :--- | :--- | :--- |
-| [Configure Git](./git/configure_git.md) | Bash | Applies a standard set of Git configuration defaults including user info and credential caching. |
-| [Cleanup Git Branches](./git/cleanup_git_branches.md) | Bash | Prunes merged branches and can register a reusable `git local-prune` alias. |
-
-## SSH
-
-Shell scripts live under the `ssh/` directory.
-
-| Tool | Language(s) | Description |
-| :--- | :--- | :--- |
-| [Setup SSH Key](./ssh/README.md) | Bash | Generates (or reuses) an SSH key and installs it on a remote host for passwordless login. |
+- [Git](./git/README.md)
+- [Linux](./linux/README.md)
+- [SSH](./ssh/README.md)
+- [Windows](./windows/README.md)
 
 ## Contributing
 

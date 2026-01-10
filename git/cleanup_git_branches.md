@@ -1,5 +1,8 @@
 # cleanup_git_branches.sh
 
+## Purpose
+The goal of this script is to keep your local repository tidy by removing branches that have already been merged and deleted on the remote. This prevents the accumulation of stale branches.
+
 Removes local branches whose upstream counterparts have been deleted so your repository stays tidy.
 
 ## What it does
@@ -20,3 +23,4 @@ Run the script from inside the repository you want to clean:
 
 ## Git alias
 If you allow it, the script registers a global `git local-prune` alias. After that you can simply run `git local-prune` in any repository to prune merged branches.
+

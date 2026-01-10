@@ -1,5 +1,8 @@
 # configure_git.sh
 
+## Purpose
+The goal of this script is to apply a consistent set of Git settings for everyday development, ensuring that all team members have a similar and optimized Git environment.
+
 `configure_git.sh` applies a consistent set of Git settings for everyday development.
 
 ## What it does
@@ -21,3 +24,4 @@
 ## Notes
 - All configuration changes are applied with `--global`.
 - When run from Git Bash on Windows the script also sets `core.filemode=false` to avoid noisy permission diffs.
+
