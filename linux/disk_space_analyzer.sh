@@ -17,6 +17,12 @@ NC='\033[0m' # No Color
 VERBOSE=false
 QUICK_MODE=false
 TOTAL_RECLAIMABLE=0
+PKG_MANAGER=""
+ASSUME_YES=false
+QUIET_INSTALL=false
+PROMPT_ALLOWED=true
+declare -a WARNINGS=()
+
 
 # Show usage information
 show_usage() {
@@ -30,6 +36,8 @@ OPTIONS:
     -v, --verbose       Show detailed output
     -q, --quick         Skip slow operations (large file searches)
     --no-color          Disable colored output
+    -y, --yes           Automatically install missing tools when possible
+    --quiet             Run non-interactively (no prompts, no auto-install attempts)
 
 EXAMPLES:
     sudo $(basename "$0")              # Full analysis
@@ -55,6 +63,16 @@ parse_args() {
                 QUICK_MODE=true
                 shift
                 ;;
+            -y|--yes)
+                ASSUME_YES=true
+                PROMPT_ALLOWED=false
+                shift
+                ;;
+            --quiet)
+                QUIET_INSTALL=true
+                PROMPT_ALLOWED=false
+                shift
+                ;;
             --no-color)
                 RED='' GREEN='' YELLOW='' BLUE='' CYAN='' NC=''
                 shift
@@ -65,21 +83,170 @@ parse_args() {
                 ;;
         esac
     done
+
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        PROMPT_ALLOWED=false
+        QUIET_INSTALL=${QUIET_INSTALL:-false}
+        if [ "$ASSUME_YES" = false ]; then
+            QUIET_INSTALL=true
+        fi
+    fi
 }
 
-# Distribution detection
-detect_distro() {
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        DISTRO=$ID
-        DISTRO_NAME=$NAME
-        VERSION=$VERSION_ID
-    else
-        DISTRO=$(uname -s)
-        DISTRO_NAME=$DISTRO
-        VERSION="unknown"
+# Track warnings to surface them in the summary
+add_warning() {
+    local message=$1
+    WARNINGS+=("$message")
+}
+
+# Build the install command for the active package manager
+build_install_command() {
+    local package=$1
+    local installer=""
+    local prefix=""
+
+    if [ "$EUID" -ne 0 ]; then
+        if command -v sudo >/dev/null 2>&1; then
+            prefix="sudo "
+        else
+            echo -e "${YELLOW}Warning:${NC} Cannot install '$package': sudo is not available for the current user."
+            add_warning "Cannot install '$package': lacking sudo privileges."
+            return 1
+        fi
     fi
-    echo -e "${BLUE}Detected distribution: $DISTRO_NAME ${VERSION}${NC}\n"
+
+    case $PKG_MANAGER in
+        dpkg)
+            if command -v apt-get >/dev/null 2>&1; then
+                installer="${prefix}apt-get install -y $package"
+            elif command -v apt >/dev/null 2>&1; then
+                installer="${prefix}apt install -y $package"
+            fi
+            ;;
+        rpm)
+            if command -v dnf >/dev/null 2>&1; then
+                installer="${prefix}dnf install -y $package"
+            elif command -v yum >/dev/null 2>&1; then
+                installer="${prefix}yum install -y $package"
+            elif command -v zypper >/dev/null 2>&1; then
+                installer="${prefix}zypper install -y $package"
+            fi
+            ;;
+        pacman)
+            if command -v pacman >/dev/null 2>&1; then
+                installer="${prefix}pacman -Sy --noconfirm $package"
+            fi
+            ;;
+    esac
+
+    if [ -z "$installer" ]; then
+        echo -e "${YELLOW}Warning:${NC} Automatic install not supported for '$package' on this system."
+        add_warning "Automatic install not supported for '$package' on this system."
+        return 1
+    fi
+
+    echo "$installer"
+    return 0
+}
+
+# Attempt to install a missing tool if policy allows it
+attempt_install() {
+    local tool=$1
+    local package=${2:-$1}
+    local install_cmd
+
+    if [ "$ASSUME_YES" = false ] && [ "$QUIET_INSTALL" = true ] && [ "$PROMPT_ALLOWED" = false ]; then
+        echo -e "${YELLOW}Skipping automatic installation of '$tool' (non-interactive mode).${NC}"
+        add_warning "Skipped installing '$tool' due to non-interactive mode."
+        return 1
+    fi
+
+    install_cmd=$(build_install_command "$package") || return 1
+
+    if [ "$ASSUME_YES" = true ]; then
+        echo -e "${YELLOW}Attempting to install '$package' automatically...${NC}"
+        if eval "$install_cmd" >/dev/null 2>&1; then
+            echo -e "${GREEN}Successfully installed '$package'.${NC}"
+            return 0
+        fi
+        echo -e "${RED}Automatic installation of '$package' failed.${NC}"
+        add_warning "Automatic install of '$package' failed. Please install it manually."
+        return 1
+    fi
+
+    if [ "$PROMPT_ALLOWED" = true ]; then
+        echo -e "${YELLOW}Required tool '$tool' is missing.${NC}"
+        echo -e "${YELLOW}Proposed command:${NC} $install_cmd"
+        read -r -p "Install now? [y/N]: " reply
+        case $reply in
+            [yY]|[yY][eE][sS])
+                if eval "$install_cmd" >/dev/null 2>&1; then
+                    echo -e "${GREEN}Successfully installed '$package'.${NC}"
+                    return 0
+                fi
+                echo -e "${RED}Automatic installation of '$package' failed.${NC}"
+                add_warning "Automatic install of '$package' failed. Please install it manually."
+                return 1
+                ;;
+            *)
+                add_warning "User declined installation of '$tool'."
+                return 1
+                ;;
+        esac
+    fi
+
+    add_warning "Skipped installing '$tool'; run '$install_cmd' manually if needed."
+    return 1
+}
+
+# Ensure a tool exists, optionally attempting installation
+ensure_tool() {
+    local tool=$1
+    local required=${2:-false}
+    local package_name=${3:-$tool}
+
+    if command -v "$tool" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if [ "$PKG_MANAGER" != "" ]; then
+        attempt_install "$tool" "$package_name" || true
+    fi
+
+    if command -v "$tool" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if [ "$required" = true ]; then
+        echo -e "${RED}Error: Required tool '$tool' is not available.${NC}"
+        add_warning "Required tool '$tool' missing."
+        exit 1
+    else
+        add_warning "Optional tool '$tool' missing; related checks skipped."
+        return 1
+    fi
+}
+
+# Detect package manager
+detect_pkg_manager() {
+    if command -v dpkg >/dev/null 2>&1; then
+        PKG_MANAGER="dpkg"
+        echo -e "${BLUE}Detected package manager: apt/dpkg${NC}\n"
+    elif command -v rpm >/dev/null 2>&1; then
+        PKG_MANAGER="rpm"
+        if command -v dnf >/dev/null 2>&1; then
+            echo -e "${BLUE}Detected package manager: dnf/rpm${NC}\n"
+        elif command -v yum >/dev/null 2>&1; then
+            echo -e "${BLUE}Detected package manager: yum/rpm${NC}\n"
+        else
+            echo -e "${BLUE}Detected package manager: rpm${NC}\n"
+        fi
+    elif command -v pacman >/dev/null 2>&1; then
+        PKG_MANAGER="pacman"
+        echo -e "${BLUE}Detected package manager: pacman${NC}\n"
+    else
+        echo -e "${YELLOW}Could not detect a supported package manager.${NC}\n"
+    fi
 }
 
 # Log verbose messages
@@ -130,6 +297,11 @@ check_privileges() {
     fi
 }
 
+# Verify hard dependencies before running the analysis
+check_dependencies() {
+    ensure_tool "bc" true
+}
+
 # Disk usage overview
 analyze_disk_usage() {
     print_header "DISK USAGE OVERVIEW"
@@ -145,43 +317,28 @@ analyze_disk_usage() {
 analyze_large_packages() {
     print_header "LARGEST INSTALLED PACKAGES"
     
-    case $DISTRO in
-        debian|ubuntu|linuxmint|pop)
-            if command -v dpkg-query >/dev/null 2>&1; then
-                log_verbose "Analyzing Debian/Ubuntu packages..."
-                dpkg-query -Wf '${Installed-Size}\t${Package}\n' 2>/dev/null | \
-                awk '{printf "%.1f MB\t%s\n", $1/1024, $2}' | \
-                sort -nr | head -15
-            fi
+    case $PKG_MANAGER in
+        dpkg)
+            log_verbose "Analyzing dpkg packages..."
+            dpkg-query -Wf '${Installed-Size}\t${Package}\n' 2>/dev/null | \
+            awk '{printf "%.1f MB\t%s\n", $1/1024, $2}' | \
+            sort -nr | head -15
             ;;
-        fedora|rhel|centos|rocky|almalinux)
-            if command -v rpm >/dev/null 2>&1; then
-                log_verbose "Analyzing RPM packages..."
-                rpm -qa --queryformat '%{SIZE} %{NAME}\n' 2>/dev/null | \
-                sort -nr | \
-                awk '{printf "%.1f MB\t%s\n", $1/1024/1024, $2}' | \
-                head -15
-            fi
+        rpm)
+            log_verbose "Analyzing RPM packages..."
+            rpm -qa --queryformat '%{SIZE} %{NAME}\n' 2>/dev/null | \
+            sort -nr | \
+            awk '{printf "%.1f MB\t%s\n", $1/1024/1024, $2}' | \
+            head -15
             ;;
-        arch|manjaro|endeavouros)
-            if command -v pacman >/dev/null 2>&1; then
-                log_verbose "Analyzing Arch packages..."
-                pacman -Qi 2>/dev/null | \
-                awk '/^Name/{name=$3} /^Installed Size/{print $4" "$5"\t"name}' | \
-                sort -hr | head -15
-            fi
-            ;;
-        opensuse*|sles)
-            if command -v rpm >/dev/null 2>&1; then
-                log_verbose "Analyzing openSUSE packages..."
-                rpm -qa --queryformat '%{SIZE} %{NAME}\n' 2>/dev/null | \
-                sort -nr | \
-                awk '{printf "%.1f MB\t%s\n", $1/1024/1024, $2}' | \
-                head -15
-            fi
+        pacman)
+            log_verbose "Analyzing pacman packages..."
+            pacman -Qi 2>/dev/null | \
+            awk '/^Name/{name=$3} /^Installed Size/{print $4" "$5"\t"name}' | \
+            sort -hr | head -15
             ;;
         *)
-            echo "Package analysis not supported for $DISTRO"
+            echo "Package analysis not supported for this system."
             ;;
     esac
     echo ""
@@ -191,22 +348,18 @@ analyze_large_packages() {
 analyze_old_kernels() {
     print_header "OLD KERNEL VERSIONS"
     
-    case $DISTRO in
-        debian|ubuntu)
-            if [ -x "$(command -v dpkg)" ]; then
-                current_kernel=$(uname -r)
-                echo -e "Current kernel: ${GREEN}$current_kernel${NC}"
-                echo -e "\nOther installed kernels:"
-                dpkg -l | grep 'linux-image' | grep -v "$current_kernel" | grep -v 'linux-image-generic' | awk '{print $2 " " $3}' || true
-            fi
+    case $PKG_MANAGER in
+        dpkg)
+            current_kernel=$(uname -r)
+            echo -e "Current kernel: ${GREEN}$current_kernel${NC}"
+            echo -e "\nOther installed kernels:"
+            dpkg -l | grep 'linux-image' | grep -v "$current_kernel" | grep -v 'linux-image-generic' | awk '{print $2 " " $3}' || true
             ;;
-        fedora|rhel|centos)
-            if [ -x "$(command -v rpm)" ]; then
-                current_kernel=$(uname -r)
-                echo -e "Current kernel: ${GREEN}$current_kernel${NC}"
-                echo -e "\nOther installed kernels:"
-                rpm -q kernel | grep -v "$current_kernel" || true
-            fi
+        rpm)
+            current_kernel=$(uname -r)
+            echo -e "Current kernel: ${GREEN}$current_kernel${NC}"
+            echo -e "\nOther installed kernels:"
+            rpm -q kernel | grep -v "$current_kernel" || true
             ;;
     esac
     echo ""
@@ -216,15 +369,15 @@ analyze_old_kernels() {
 analyze_package_cache() {
     print_header "PACKAGE CACHE SIZE"
     
-    case $DISTRO in
-        debian|ubuntu|linuxmint|pop)
+    case $PKG_MANAGER in
+        dpkg)
             if [ -d /var/cache/apt/archives ]; then
                 cache_size=$(du -sh /var/cache/apt/archives 2>/dev/null | cut -f1 || echo "0")
                 echo -e "APT cache size: ${YELLOW}$cache_size${NC}"
                 add_reclaimable "$cache_size"
             fi
             ;;
-        fedora|rhel|centos|rocky|almalinux)
+        rpm)
             if [ -d /var/cache/dnf ]; then
                 cache_size=$(du -sh /var/cache/dnf 2>/dev/null | cut -f1 || echo "0")
                 echo -e "DNF cache size: ${YELLOW}$cache_size${NC}"
@@ -235,18 +388,16 @@ analyze_package_cache() {
                 echo -e "YUM cache size: ${YELLOW}$cache_size${NC}"
                 add_reclaimable "$cache_size"
             fi
-            ;;
-        arch|manjaro|endeavouros)
-            if [ -d /var/cache/pacman/pkg ]; then
-                cache_size=$(du -sh /var/cache/pacman/pkg 2>/dev/null | cut -f1 || echo "0")
-                echo -e "Pacman cache size: ${YELLOW}$cache_size${NC}"
-                add_reclaimable "$cache_size"
-            fi
-            ;;
-        opensuse*|sles)
             if [ -d /var/cache/zypp ]; then
                 cache_size=$(du -sh /var/cache/zypp 2>/dev/null | cut -f1 || echo "0")
                 echo -e "Zypper cache size: ${YELLOW}$cache_size${NC}"
+                add_reclaimable "$cache_size"
+            fi
+            ;;
+        pacman)
+            if [ -d /var/cache/pacman/pkg ]; then
+                cache_size=$(du -sh /var/cache/pacman/pkg 2>/dev/null | cut -f1 || echo "0")
+                echo -e "Pacman cache size: ${YELLOW}$cache_size${NC}"
                 add_reclaimable "$cache_size"
             fi
             ;;
@@ -258,9 +409,9 @@ analyze_package_cache() {
 analyze_orphaned_packages() {
     print_header "ORPHANED PACKAGES"
     
-    case $DISTRO in
-        debian|ubuntu)
-            if [ -x "$(command -v deborphan)" ]; then
+    case $PKG_MANAGER in
+        dpkg)
+            if ensure_tool "deborphan" false; then
                 orphaned=$(deborphan 2>/dev/null | wc -l)
                 echo -e "Orphaned packages: ${YELLOW}$orphaned${NC}"
                 if [ "$orphaned" -gt 0 ]; then
@@ -271,11 +422,23 @@ analyze_orphaned_packages() {
                 echo "Install 'deborphan' for detailed analysis"
             fi
             ;;
-        fedora|rhel|centos)
-            if [ -x "$(command -v package-cleanup)" ]; then
-                package-cleanup --leaves 2>/dev/null | head -10
-            else
-                echo "Install 'yum-utils' for leaf package analysis"
+        rpm)
+            if command -v dnf >/dev/null 2>&1; then
+                dnf autoremove --assumeno | grep "Removing:"
+            elif command -v yum >/dev/null 2>&1; then
+                if ensure_tool "package-cleanup" false "yum-utils"; then
+                    package-cleanup --leaves 2>/dev/null | head -10
+                else
+                    echo "Install 'yum-utils' for detailed analysis"
+                fi
+            fi
+            ;;
+        pacman)
+            orphaned=$(pacman -Qtdq 2>/dev/null | wc -l)
+            echo -e "Orphaned packages: ${YELLOW}$orphaned${NC}"
+            if [ "$orphaned" -gt 0 ]; then
+                echo "List:"
+                pacman -Qtdq
             fi
             ;;
     esac
@@ -497,16 +660,16 @@ analyze_dev_tools() {
     
     echo ""
     
-    case $DISTRO in
-        debian|ubuntu|linuxmint|pop)
+    case $PKG_MANAGER in
+        dpkg)
             dev_packages=$(dpkg -l 2>/dev/null | grep -E '(gcc|g\+\+|build-essential|cmake|make|python3-dev|nodejs|npm|git)' | wc -l || echo "0")
             echo -e "Development packages installed: ${YELLOW}$dev_packages${NC}"
             ;;
-        fedora|rhel|centos|rocky|almalinux)
+        rpm)
             dev_packages=$(rpm -qa 2>/dev/null | grep -E '(gcc|gcc-c++|cmake|make|python3-devel|nodejs|npm|git)' | wc -l || echo "0")
             echo -e "Development packages installed: ${YELLOW}$dev_packages${NC}"
             ;;
-        arch|manjaro|endeavouros)
+        pacman)
             dev_packages=$(pacman -Qq 2>/dev/null | grep -E '(gcc|cmake|make|python|nodejs|npm|git)' | wc -l || echo "0")
             echo -e "Development packages installed: ${YELLOW}$dev_packages${NC}"
             ;;
@@ -520,36 +683,44 @@ generate_suggestions() {
     
     echo -e "${GREEN}Safe Cleanup Commands:${NC}"
     echo -e "1. Clean package cache:"
-    case $DISTRO in
-        debian|ubuntu|linuxmint|pop)
+    case $PKG_MANAGER in
+        dpkg)
             echo -e "   ${YELLOW}sudo apt clean${NC}"
             echo -e "   ${YELLOW}sudo apt autoclean${NC}  # Remove old package files"
             ;;
-        fedora|rhel|centos|rocky|almalinux)
-            echo -e "   ${YELLOW}sudo dnf clean all${NC}"
+        rpm)
+            if command -v dnf >/dev/null 2>&1; then
+                echo -e "   ${YELLOW}sudo dnf clean all${NC}"
+            elif command -v yum >/dev/null 2>&1; then
+                echo -e "   ${YELLOW}sudo yum clean all${NC}"
+            fi
+            if command -v zypper >/dev/null 2>&1; then
+                 echo -e "   ${YELLOW}sudo zypper clean --all${NC}"
+            fi
             ;;
-        arch|manjaro|endeavouros)
+        pacman)
             echo -e "   ${YELLOW}sudo pacman -Sc${NC}  # Clean package cache"
             echo -e "   ${YELLOW}sudo pacman -Scc${NC}  # Clean all cache (aggressive)"
-            ;;
-        opensuse*|sles)
-            echo -e "   ${YELLOW}sudo zypper clean --all${NC}"
             ;;
     esac
     
     echo -e "\n2. Remove orphaned packages:"
-    case $DISTRO in
-        debian|ubuntu|linuxmint|pop)
+    case $PKG_MANAGER in
+        dpkg)
             echo -e "   ${YELLOW}sudo apt autoremove --purge${NC}"
             ;;
-        fedora|rhel|centos|rocky|almalinux)
-            echo -e "   ${YELLOW}sudo dnf autoremove${NC}"
+        rpm)
+            if command -v dnf >/dev/null 2>&1; then
+                echo -e "   ${YELLOW}sudo dnf autoremove${NC}"
+            elif command -v yum >/dev/null 2>&1; then
+                echo -e "   ${YELLOW}sudo yum autoremove${NC}"
+            fi
+            if command -v zypper >/dev/null 2>&1; then
+                echo -e "   ${YELLOW}sudo zypper packages --unneeded${NC}"
+            fi
             ;;
-        arch|manjaro|endeavouros)
+        pacman)
             echo -e "   ${YELLOW}sudo pacman -Rns \$(pacman -Qtdq)${NC}  # Remove orphans"
-            ;;
-        opensuse*|sles)
-            echo -e "   ${YELLOW}sudo zypper packages --unneeded${NC}"
             ;;
     esac
     
@@ -587,14 +758,18 @@ generate_suggestions() {
     
     echo -e "\n${GREEN}Advanced (Review carefully before running):${NC}"
     echo -e "9. Remove old kernels (keep current + 1):"
-    case $DISTRO in
-        debian|ubuntu|linuxmint|pop)
+    case $PKG_MANAGER in
+        dpkg)
             echo -e "   ${RED}sudo apt autoremove --purge${NC}  # Usually handles old kernels"
             ;;
-        fedora|rhel|centos|rocky|almalinux)
-            echo -e "   ${RED}sudo dnf remove \$(dnf repoquery --installonly --latest-limit=-2 -q)${NC}"
+        rpm)
+            if command -v dnf >/dev/null 2>&1; then
+                echo -e "   ${RED}sudo dnf remove \$(dnf repoquery --installonly --latest-limit=-2 -q)${NC}"
+            elif command -v yum >/dev/null 2>&1; then
+                echo -e "   ${RED}sudo yum remove \$(yum repoquery --installonly --latest-limit=-2 -q)${NC}"
+            fi
             ;;
-        arch|manjaro|endeavouros)
+        pacman)
             echo -e "   ${RED}# Manually remove old kernels from /boot${NC}"
             ;;
     esac
@@ -616,6 +791,14 @@ show_summary() {
     echo -e "${CYAN}This is an estimate based on caches and temporary files.${NC}"
     echo -e "${CYAN}Actual space freed may vary depending on what you choose to clean.${NC}"
     echo ""
+
+    if [ ${#WARNINGS[@]} -gt 0 ]; then
+        echo -e "${YELLOW}Warnings:${NC}"
+        for warning in "${WARNINGS[@]}"; do
+            echo -e " - ${YELLOW}$warning${NC}"
+        done
+        echo ""
+    fi
 }
 
 # Main function
@@ -626,7 +809,8 @@ main() {
     echo -e "${BLUE}║    Linux Disk Space Analyzer v2.0     ║${NC}"
     echo -e "${BLUE}╚════════════════════════════════════════╝${NC}\n"
     
-    detect_distro
+    detect_pkg_manager
+    check_dependencies
     check_privileges
     
     log_verbose "Starting disk analysis..."
