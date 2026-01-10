@@ -41,7 +41,7 @@ USAGE
 #   - User identity (name, email)
 #   - Performance optimizations (buffer sizes, compression)
 #   - Line ending normalization
-#   - Credential caching (5 hours timeout)
+#   - Credential caching (24 hours timeout)
 #
 
 #############################################################
