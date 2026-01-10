@@ -1,6 +1,6 @@
 # Utility Scripts
 
-This repository contains a collection of scripts for automating common development and operational tasks. Each directory contains a self-contained tool with its own documentation.
+This repository contains a collection of scripts for automating common development and operational tasks. Each directory contains a self-contained tools with its own documentation.
 
 ## Available Tools
 
@@ -8,6 +8,7 @@ This repository contains a collection of scripts for automating common developme
 - [Git](./git/README.md)
 - [Linux](./linux/README.md)
 - [SSH](./ssh/README.md)
+- [VSCode](./vscode/README.md)
 - [Windows](./windows/README.md)
 
 ## Contributing

@@ -1,0 +1,168 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+        {
+            "label": "dependencies",
+			"type": "shell",
+			"command": "./dependencies.sh",
+			"args": [],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }, 
+        },
+        {
+            "label": "configure",
+			"type": "shell",
+			"command": "cmake",
+			"args": ["-S", ".", "-B", "build"],
+            "group": "build",
+            "dependsOn": ["dependencies"],
+			"problemMatcher": ["$gcc"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }, 
+        },
+        {
+            "label": "build",
+			"type": "shell",
+			"command": "cmake",
+			"args": ["--build", "build", "--parallel", "$(nproc)", "--target", "all"],
+            "group": "build",
+            "dependsOn": ["configure"],
+			"problemMatcher": ["$gcc"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }, 
+        },
+        {
+            "label": "clean",
+			"type": "shell",
+			"command": "cmake",
+			"args": ["--build", "build", "--parallel", "$(nproc)", "--target", "clean"],
+            "group": "clean",
+            "dependsOn": ["configure-unit-tests"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }, 
+        },
+        {
+            "label": "run",
+			"type": "shell",
+			"command": "${workspaceFolder}/build/$(sed -n 's/^CMAKE_PROJECT_NAME:.*=//p' ${workspaceFolder}/build/CMakeCache.txt)",
+            "group": "run",
+            "dependsOn": ["build"],
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "LICENSEKEY": "<license key>"
+                }
+            },
+        },
+        {
+            "label": "configure-unit-tests",
+			"type": "shell",
+			"command": "cmake",
+			"args": ["-S", ".", "-B", "build", "-Dtest=ON"],
+            "group": "build",
+            "dependsOn": ["dependencies"],
+			"problemMatcher": ["$gcc"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }, 
+        },
+        {
+            "label": "build-unit-tests",
+			"type": "shell",
+			"command": "cmake",
+			"args": ["--build", "build", "--parallel", "$(nproc)", "--target", "all"],
+            "group": "build",
+            "dependsOn": ["configure-unit-tests"],
+			"problemMatcher": ["$gcc"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }, 
+        },
+        {
+            "label": "run-unit-tests",
+            "type": "shell",
+            "command": "for target in $(cmake --build build --target help | grep tests | sed -n 's/.*\\.\\.\\. //p'); do binary=$(sed -n \"s|^.*/${target}\\.dir$|&|p\" build/CMakeFiles/TargetDirectories.txt | sed \"s|/CMakeFiles/.*|/${target}|\"); \"$binary\"; done",
+            "group": "run",
+            "dependsOn": ["build-unit-tests"],
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "LICENSEKEY": "<license key>"
+                }
+            },
+        },
+        {
+            "label": "configure-asan",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["-S", ".", "-B", "build-asan", "-Dtest=ON", "-D__SANITIZE_ADDRESS__=ON"],
+            "group": "build",
+            "dependsOn": ["dependencies"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+        },
+        {
+            "label": "build-asan",
+			"type": "shell",
+			"command": "cmake",
+			"args": ["--build", "build-asan", "--parallel", "$(nproc)", "--target", "all"],
+            "group": "build",
+            "dependsOn": ["configure-asan"],
+			"problemMatcher": ["$gcc"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+        },
+        {
+            "label": "configure-ubsan",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["-S", ".", "-B", "build-ubsan", "-Dtest=ON", "-D__SANITIZE_UNDEFINED__=ON"],
+            "group": "build",
+            "dependsOn": ["dependencies"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+        },
+        {
+            "label": "build-ubsan",
+			"type": "shell",
+			"command": "cmake",
+			"args": ["--build", "build-ubsan", "--parallel", "$(nproc)", "--target", "all"],
+            "group": "build",
+            "dependsOn": ["configure-ubsan"],
+			"problemMatcher": ["$gcc"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+        },
+        {
+            "label": "configure-tsan",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["-S", ".", "-B", "build-tsan", "-Dtest=ON", "-D__SANITIZE_THREAD__=ON"],
+            "group": "build",
+            "dependsOn": ["dependencies"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+        },
+        {
+            "label": "build-tsan",
+			"type": "shell",
+			"command": "cmake",
+			"args": ["--build", "build-tsan", "--parallel", "$(nproc)", "--target", "all"],
+            "group": "build",
+            "dependsOn": ["configure-tsan"],
+			"problemMatcher": ["$gcc"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+        },
+	]
+}
