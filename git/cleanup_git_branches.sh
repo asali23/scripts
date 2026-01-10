@@ -10,7 +10,7 @@ check_git_alias() {
 
 # Function to setup git alias
 setup_git_alias() {
-    local alias_command="!git remote | xargs -n 1 git remote prune && git branch -vv | grep ': gone]' | awk '{print \\$1}' | xargs -r git branch -D"
+    local alias_command="!git remote | xargs -n 1 git remote prune && git branch -vv | grep ': gone]' | awk '{print \$1}' | xargs -r git branch -D"
     git config --global alias.local-prune "$alias_command"
     echo "[OK] Git alias 'git local-prune' has been added to your global git configuration."
     echo "    You can now use 'git local-prune' anywhere to clean up local branches."
