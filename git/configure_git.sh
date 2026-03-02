@@ -9,6 +9,7 @@
 #############################################################
 NAME=""
 EMAIL=""
+LOCAL=false
 
 print_usage() {
         cat <<USAGE
@@ -19,7 +20,8 @@ Required arguments:
     --email  Git user.email value
 
 Optional arguments:
-    -h, --help  Show this help message and exit
+    --local       Configure the repository-local git config instead of global
+    -h, --help    Show this help message and exit
 USAGE
 }
 
@@ -70,6 +72,10 @@ while [[ $# -gt 0 ]]; do
             EMAIL="$2"
             shift 2
             ;;
+        --local)
+            LOCAL=true
+            shift
+            ;;
         -h|--help)
             print_usage
             exit 0
@@ -89,7 +95,13 @@ if [[ -z "$NAME" || -z "$EMAIL" ]]; then
     exit 1
 fi
 
-echo "Starting Git configuration..."
+# determine configuration scope (global by default, or local if requested)
+SCOPE="--global"
+if [[ "$LOCAL" == true ]]; then
+    SCOPE="--local"
+fi
+
+echo "Starting Git configuration (scope: $SCOPE)..."
 #
 #############################################################
 # Detect host platform
@@ -107,35 +119,35 @@ echo "Detected platform: $PLATFORM"
 #############################################################
 # Set user identity (replace with your actual information)
 #############################################################
-git config --global user.name "$NAME"
-git config --global user.email "$EMAIL"
+git config $SCOPE user.name "$NAME"
+git config $SCOPE user.email "$EMAIL"
 
 #############################################################
 # Performance and memory settings
 #############################################################
 # http.postBuffer: Increases the buffer size for HTTP operations
 # This is especially useful when pushing large repositories or files
-git config --global http.postBuffer 1048576000
+git config $SCOPE http.postBuffer 1048576000
 
 # pack.packSizeLimit: Controls the maximum size of a pack file
 # Smaller pack files reduce memory usage during clone/fetch operations
-git config --global pack.packSizeLimit 50m
+git config $SCOPE pack.packSizeLimit 50m
 
 # pack.windowMemory: Limits memory used during pack file creation
 # Helps prevent Git from consuming too much RAM on systems with limited resources
-git config --global pack.windowMemory 50m
+git config $SCOPE pack.windowMemory 50m
 
 # core.compression: Sets the compression level used by Git
 # Level 5 provides a good balance between compression ratio and speed
 # Range is 0 (no compression) to 9 (maximum compression)
-git config --global core.compression 5
+git config $SCOPE core.compression 5
 
 #############################################################
 # User interface settings
 #############################################################
 # color.ui: Enables colored output in Git commands for improved readability
 # Makes it easier to distinguish different types of information in Git output
-git config --global color.ui auto
+git config $SCOPE color.ui auto
 
 # core.autocrlf: Handles line ending conversions between operating systems
 # Use platform-specific defaults: 'true' for Windows Git, 'input' elsewhere
@@ -147,7 +159,7 @@ git config --global core.autocrlf "$CORE_AUTOCRLF"
 
 # core.filemode: Prevent Git on Windows from flagging permission changes
 if [[ "$PLATFORM" == "windows" ]]; then
-    git config --global core.filemode false
+    git config $SCOPE core.filemode false
 fi
 
 #############################################################
@@ -155,7 +167,7 @@ fi
 #############################################################
 # credential.helper: Stores credentials temporarily to avoid repeated password entry
 # Timeout value (86400 seconds = 24 hours) determines how long credentials are cached
-git config --global credential.helper 'cache --timeout=86400'
+git config $SCOPE credential.helper 'cache --timeout=86400'
 
 echo "Git configuration completed successfully!"
-echo "To verify your settings, run: git config --list"
+echo "To verify your settings (scope: $SCOPE), run: git config $SCOPE --list  # or omit $SCOPE to see all configs"
