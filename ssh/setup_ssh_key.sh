@@ -1,10 +1,11 @@
 #!/bin/bash
 #
 # Automates SSH key-based authentication setup
-# Usage: ./setup_ssh_key.sh [--key-file /path/to/key] <username> <hostname> [port]
+# Usage: ./setup_ssh_key.sh [--key-file /path/to/key | --key-name name] <username> <hostname> [port]
 #
 # Example:
 #   ./setup_ssh_key.sh asad 192.168.1.100
+#   ./setup_ssh_key.sh --key-name mykey asad myserver.com
 #   ./setup_ssh_key.sh --key-file "$HOME/.ssh/id_ed25519" asad myserver.com 2222
 
 
@@ -19,19 +20,24 @@ done
 
 usage() {
     cat <<USAGE
-Usage: $0 [--key-file /path/to/key] <username> <hostname> [port]
+Usage: $0 [--key-file /path/to/key | --key-name name] <username> <hostname> [port]
 
 Options:
   --key-file PATH   Use an existing key pair instead of the default (~/.ssh/id_ed25519)
+  --key-name NAME   Create/use a key pair named NAME under ~/.ssh (overrides default id_ed25519)
   -h, --help        Show this help message
 
 Examples:
   $0 devuser example.com
+  $0 --key-name mykey devuser example.com
   $0 --key-file ~/.ssh/my_key devuser example.com 2222
 USAGE
 }
 
-KEY_FILE="$HOME/.ssh/id_ed25519"
+# default name and path
+KEY_DIR="$HOME/.ssh"
+KEY_NAME="id_ed25519"
+KEY_FILE="$KEY_DIR/$KEY_NAME"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -42,6 +48,17 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             KEY_FILE="$2"
+            KEY_NAME=""  # explicit file overrides name
+            shift 2
+            ;;
+        --key-name)
+            if [[ $# -lt 2 || "$2" == -* ]]; then
+                echo "ERROR: --key-name requires a name argument."
+                usage
+                exit 1
+            fi
+            KEY_NAME="$2"
+            KEY_FILE="$KEY_DIR/$KEY_NAME"
             shift 2
             ;;
         -h|--help)
@@ -62,6 +79,11 @@ done
 if [[ $# -lt 2 ]]; then
     usage
     exit 1
+fi
+
+# re-evaluate KEY_FILE if KEY_NAME changed after shifting args
+if [[ -n "$KEY_NAME" && -z "$KEY_FILE" ]]; then
+    KEY_FILE="$KEY_DIR/$KEY_NAME"
 fi
 
 USER_NAME="$1"
