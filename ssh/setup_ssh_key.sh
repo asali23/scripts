@@ -90,6 +90,11 @@ USER_NAME="$1"
 HOST_NAME="$2"
 PORT="${3:-22}"
 
+if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: Port must be a numeric value, got: $PORT"
+    exit 1
+fi
+
 if [ -z "$USER_NAME" ] || [ -z "$HOST_NAME" ]; then
     usage
     exit 1

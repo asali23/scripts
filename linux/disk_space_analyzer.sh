@@ -16,6 +16,7 @@ NC='\033[0m' # No Color
 # Configuration
 VERBOSE=false
 QUICK_MODE=false
+CLEANUP_MODE=false
 TOTAL_RECLAIMABLE=0
 PKG_MANAGER=""
 ASSUME_YES=false
@@ -35,6 +36,7 @@ OPTIONS:
     -h, --help          Show this help message
     -v, --verbose       Show detailed output
     -q, --quick         Skip slow operations (large file searches)
+    -c, --cleanup       Execute safe cleanup commands automatically
     --no-color          Disable colored output
     -y, --yes           Automatically install missing tools when possible
     --quiet             Run non-interactively (no prompts, no auto-install attempts)
@@ -42,6 +44,7 @@ OPTIONS:
 EXAMPLES:
     sudo $(basename "$0")              # Full analysis
     $(basename "$0") --quick           # Quick scan
+    sudo $(basename "$0") --cleanup    # Execute safe cleanups
     sudo $(basename "$0") --verbose    # Detailed output
 
 EOF
@@ -61,6 +64,10 @@ parse_args() {
                 ;;
             -q|--quick)
                 QUICK_MODE=true
+                shift
+                ;;
+            -c|--cleanup)
+                CLEANUP_MODE=true
                 shift
                 ;;
             -y|--yes)
@@ -589,11 +596,14 @@ analyze_browser_caches() {
 
 # Coredumps and crash reports
 analyze_coredumps() {
+    local crash_count="0"
+    local core_count="0"
+    local user_cores="0"
     print_header "COREDUMPS & CRASH REPORTS"
     
     # Check /var/crash
     if [ -d /var/crash ]; then
-        local crash_count=$(find /var/crash -type f 2>/dev/null | wc -l || echo "0")
+        crash_count=$(find /var/crash -type f 2>/dev/null | wc -l || echo "0")
         local crash_size=$(du -sh /var/crash 2>/dev/null | cut -f1 || echo "0")
         if [ "$crash_count" -gt 0 ]; then
             echo -e "Crash reports in /var/crash: ${YELLOW}$crash_count files ($crash_size)${NC}"
@@ -602,7 +612,7 @@ analyze_coredumps() {
     
     # Check systemd coredumps
     if [ -d /var/lib/systemd/coredump ]; then
-        local core_count=$(find /var/lib/systemd/coredump -type f 2>/dev/null | wc -l || echo "0")
+        core_count=$(find /var/lib/systemd/coredump -type f 2>/dev/null | wc -l || echo "0")
         local core_size=$(du -sh /var/lib/systemd/coredump 2>/dev/null | cut -f1 || echo "0")
         if [ "$core_count" -gt 0 ]; then
             echo -e "Systemd coredumps: ${YELLOW}$core_count files ($core_size)${NC}"
@@ -611,7 +621,7 @@ analyze_coredumps() {
     fi
     
     # Check for core files in common locations
-    local user_cores=$(find ~ -maxdepth 2 -name "core.*" -o -name "core" -type f 2>/dev/null | wc -l || echo "0")
+    user_cores=$(find ~ -maxdepth 2 \( -name "core.*" -o -name "core" \) -type f 2>/dev/null | wc -l || echo "0")
     if [ "$user_cores" -gt 0 ]; then
         echo -e "Core files in home directory: ${YELLOW}$user_cores${NC}"
     fi
@@ -782,6 +792,97 @@ generate_suggestions() {
     echo -e "${YELLOW}⚠ Make backups of important data first!${NC}"
 }
 
+# Execute safe cleanup commands
+execute_cleanup() {
+    print_header "EXECUTING SAFE CLEANUP"
+
+    local CLEANED=0
+
+    # 1. Package cache cleanup (safe)
+    echo -e "${BLUE}Cleaning package cache...${NC}"
+    case $PKG_MANAGER in
+        dpkg)
+            if [ "$EUID" -eq 0 ]; then
+                apt-get clean >/dev/null 2>&1 && echo -e "${GREEN}✓${NC} apt cache cleaned" && CLEANED=$((CLEANED+1))
+                apt-get autoclean >/dev/null 2>&1 && echo -e "${GREEN}✓${NC} apt autoclean completed" && CLEANED=$((CLEANED+1))
+            else
+                echo -e "${YELLOW}!${NC} Skipping apt clean (requires root)"
+            fi
+            ;;
+        rpm)
+            if [ "$EUID" -eq 0 ]; then
+                if command -v dnf >/dev/null 2>&1; then
+                    dnf clean all >/dev/null 2>&1 && echo -e "${GREEN}✓${NC} dnf cache cleaned" && CLEANED=$((CLEANED+1))
+                elif command -v yum >/dev/null 2>&1; then
+                    yum clean all >/dev/null 2>&1 && echo -e "${GREEN}✓${NC} yum cache cleaned" && CLEANED=$((CLEANED+1))
+                fi
+            else
+                echo -e "${YELLOW}!${NC} Skipping package cache clean (requires root)"
+            fi
+            ;;
+        pacman)
+            if [ "$EUID" -eq 0 ]; then
+                pacman -Sc --noconfirm >/dev/null 2>&1 && echo -e "${GREEN}✓${NC} pacman cache cleaned" && CLEANED=$((CLEANED+1))
+            else
+                echo -e "${YELLOW}!${NC} Skipping pacman cache clean (requires root)"
+            fi
+            ;;
+    esac
+
+    # 2. Journal logs (safe - keep last 7 days)
+    if command -v journalctl >/dev/null 2>&1 && [ "$EUID" -eq 0 ]; then
+        echo -e "${BLUE}Cleaning systemd journal (keeping 7 days)...${NC}"
+        if journalctl --vacuum-time=7d >/dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} systemd journal vacuumed"
+            CLEANED=$((CLEANED+1))
+        fi
+    fi
+
+    # 3. User thumbnail cache (safe)
+    if [ -d ~/.cache/thumbnails ]; then
+        echo -e "${BLUE}Cleaning thumbnail cache...${NC}"
+        rm -rf ~/.cache/thumbnails/* 2>/dev/null && echo -e "${GREEN}✓${NC} thumbnail cache cleaned" && CLEANED=$((CLEANED+1))
+    fi
+
+    # 4. Docker system prune (safe - unused only)
+    if command -v docker >/dev/null 2>&1; then
+        echo -e "${BLUE}Running docker system prune...${NC}"
+        if docker system prune -f >/dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} docker prune completed"
+            CLEANED=$((CLEANED+1))
+        fi
+    fi
+
+    # 5. Flatpak unused cleanup
+    if command -v flatpak >/dev/null 2>&1; then
+        echo -e "${BLUE}Cleaning Flatpak unused runtimes...${NC}"
+        if flatpak uninstall --unused -y >/dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} flatpak cleanup completed"
+            CLEANED=$((CLEANED+1))
+        fi
+    fi
+
+    # 6. Snap disabled cleanup
+    if command -v snap >/dev/null 2>&1 && [ "$EUID" -eq 0 ]; then
+        echo -e "${BLUE}Removing disabled snap versions...${NC}"
+        local REMOVED=0
+        snap list --all 2>/dev/null | awk '/disabled/{print $1, $3}' | while read -r name rev; do
+            if snap remove "$name" --revision="$rev" >/dev/null 2>&1; then
+                REMOVED=$((REMOVED+1))
+            fi
+        done
+        if [ "$REMOVED" -gt 0 ]; then
+            echo -e "${GREEN}✓${NC} removed $REMOVED disabled snap(s)"
+            CLEANED=$((CLEANED+1))
+        fi
+    fi
+
+    echo ""
+    echo -e "${GREEN}Cleanup completed: $CLEANED operations performed${NC}"
+    echo ""
+    echo -e "${YELLOW}Note:${NC} To see remaining cleanup suggestions, run without --cleanup"
+}
+
 # Display summary
 show_summary() {
     print_header "SUMMARY"
@@ -804,17 +905,23 @@ show_summary() {
 # Main function
 main() {
     parse_args "$@"
-    
+
     echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║    Linux Disk Space Analyzer v2.0     ║${NC}"
     echo -e "${BLUE}╚════════════════════════════════════════╝${NC}\n"
-    
+
     detect_pkg_manager
     check_dependencies
     check_privileges
-    
+
+    if [ "$CLEANUP_MODE" = true ]; then
+        log_verbose "Running cleanup mode..."
+        execute_cleanup
+        exit 0
+    fi
+
     log_verbose "Starting disk analysis..."
-    
+
     analyze_disk_usage
     analyze_large_packages
     analyze_old_kernels
@@ -826,10 +933,10 @@ main() {
     analyze_browser_caches
     analyze_containers
     analyze_dev_tools
-    
+
     show_summary
     generate_suggestions
-    
+
     echo -e "${GREEN}✓ Analysis complete!${NC}"
     echo -e "${CYAN}Run with --help to see available options.${NC}\n"
 }

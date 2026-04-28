@@ -10,6 +10,7 @@
 NAME=""
 EMAIL=""
 LOCAL=false
+LIST_MODE=false
 
 print_usage() {
         cat <<USAGE
@@ -21,6 +22,7 @@ Required arguments:
 
 Optional arguments:
     --local       Configure the repository-local git config instead of global
+    --list        Show current config and what would be changed (dry run)
     -h, --help    Show this help message and exit
 USAGE
 }
@@ -76,6 +78,10 @@ while [[ $# -gt 0 ]]; do
             LOCAL=true
             shift
             ;;
+        --list)
+            LIST_MODE=true
+            shift
+            ;;
         -h|--help)
             print_usage
             exit 0
@@ -88,8 +94,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ -z "$NAME" || -z "$EMAIL" ]]; then
-    echo "ERROR: --name and --email are required."
+if [[ "$LIST_MODE" == false && ( -z "$NAME" || -z "$EMAIL" ) ]]; then
+    echo "ERROR: --name and --email are required (or use --list to preview changes)."
     echo ""
     print_usage
     exit 1
@@ -99,6 +105,60 @@ fi
 SCOPE="--global"
 if [[ "$LOCAL" == true ]]; then
     SCOPE="--local"
+fi
+
+# If list mode, show current vs proposed and exit
+if [[ "$LIST_MODE" == true ]]; then
+    echo "=== Git Configuration Comparison ($SCOPE) ==="
+    echo ""
+
+    # Detect platform for display
+    UNAME_OUT=$(uname 2>/dev/null | tr '[:upper:]' '[:lower:]')
+    PLATFORM="unix"
+    case "$UNAME_OUT" in
+        mingw*|msys*|cygwin*)
+            PLATFORM="windows"
+            ;;
+    esac
+
+    # Determine what autocrlf would be set to
+    PROPOSED_AUTOCRLF="input"
+    [[ "$PLATFORM" == "windows" ]] && PROPOSED_AUTOCRLF="true"
+
+    echo "Platform: $PLATFORM"
+    echo ""
+    echo "Current -> Proposed:"
+    echo "--------------------"
+
+    # Settings we will configure
+    declare -A SETTINGS
+    SETTINGS["user.name"]="${NAME:-<not set>}"
+    SETTINGS["user.email"]="${EMAIL:-<not set>}"
+    SETTINGS["http.postBuffer"]="1048576000"
+    SETTINGS["pack.packSizeLimit"]="50m"
+    SETTINGS["pack.windowMemory"]="50m"
+    SETTINGS["core.compression"]="5"
+    SETTINGS["color.ui"]="auto"
+    SETTINGS["core.autocrlf"]="$PROPOSED_AUTOCRLF"
+    SETTINGS["credential.helper"]="cache --timeout=86400"
+
+    if [[ "$PLATFORM" == "windows" ]]; then
+        SETTINGS["core.filemode"]="false"
+    fi
+
+    for key in "${!SETTINGS[@]}"; do
+        current=$(git config $SCOPE "$key" 2>/dev/null || echo "<not set>")
+        proposed="${SETTINGS[$key]}"
+        if [[ "$current" != "$proposed" ]]; then
+            echo "$key: '$current' -> '$proposed'"
+        else
+            echo "$key: '$current' (no change)"
+        fi
+    done
+
+    echo ""
+    echo "Run without --list to apply these changes."
+    exit 0
 fi
 
 echo "Starting Git configuration (scope: $SCOPE)..."
@@ -119,35 +179,35 @@ echo "Detected platform: $PLATFORM"
 #############################################################
 # Set user identity (replace with your actual information)
 #############################################################
-git config $SCOPE user.name "$NAME"
-git config $SCOPE user.email "$EMAIL"
+git config "$SCOPE" user.name "$NAME"
+git config "$SCOPE" user.email "$EMAIL"
 
 #############################################################
 # Performance and memory settings
 #############################################################
 # http.postBuffer: Increases the buffer size for HTTP operations
 # This is especially useful when pushing large repositories or files
-git config $SCOPE http.postBuffer 1048576000
+git config "$SCOPE" http.postBuffer 1048576000
 
 # pack.packSizeLimit: Controls the maximum size of a pack file
 # Smaller pack files reduce memory usage during clone/fetch operations
-git config $SCOPE pack.packSizeLimit 50m
+git config "$SCOPE" pack.packSizeLimit 50m
 
 # pack.windowMemory: Limits memory used during pack file creation
 # Helps prevent Git from consuming too much RAM on systems with limited resources
-git config $SCOPE pack.windowMemory 50m
+git config "$SCOPE" pack.windowMemory 50m
 
 # core.compression: Sets the compression level used by Git
 # Level 5 provides a good balance between compression ratio and speed
 # Range is 0 (no compression) to 9 (maximum compression)
-git config $SCOPE core.compression 5
+git config "$SCOPE" core.compression 5
 
 #############################################################
 # User interface settings
 #############################################################
 # color.ui: Enables colored output in Git commands for improved readability
 # Makes it easier to distinguish different types of information in Git output
-git config $SCOPE color.ui auto
+git config "$SCOPE" color.ui auto
 
 # core.autocrlf: Handles line ending conversions between operating systems
 # Use platform-specific defaults: 'true' for Windows Git, 'input' elsewhere
@@ -155,11 +215,11 @@ CORE_AUTOCRLF="input"
 if [[ "$PLATFORM" == "windows" ]]; then
     CORE_AUTOCRLF="true"
 fi
-git config --global core.autocrlf "$CORE_AUTOCRLF"
+git config "$SCOPE" core.autocrlf "$CORE_AUTOCRLF"
 
 # core.filemode: Prevent Git on Windows from flagging permission changes
 if [[ "$PLATFORM" == "windows" ]]; then
-    git config $SCOPE core.filemode false
+    git config "$SCOPE" core.filemode false
 fi
 
 #############################################################
@@ -167,7 +227,7 @@ fi
 #############################################################
 # credential.helper: Stores credentials temporarily to avoid repeated password entry
 # Timeout value (86400 seconds = 24 hours) determines how long credentials are cached
-git config $SCOPE credential.helper 'cache --timeout=86400'
+git config "$SCOPE" credential.helper 'cache --timeout=86400'
 
 echo "Git configuration completed successfully!"
-echo "To verify your settings (scope: $SCOPE), run: git config $SCOPE --list  # or omit $SCOPE to see all configs"
+echo "To verify your settings (scope: $SCOPE), run: git config "$SCOPE" --list  # or omit $SCOPE to see all configs"

@@ -1,24 +1,15 @@
 # htop Installer
 
-## Purpose
-The purpose of this script is to automate the installation of htop, a popular process viewer, on RHEL-based systems, including the setup of the required EPEL repository.
+Automate installation of htop, an interactive process viewer, on any Linux distribution.
 
-Automated installation script for htop, an interactive process viewer for Unix systems.
+Detect distribution (Debian/Ubuntu, RHEL/CentOS/Fedora, Arch) and install htop via the appropriate package manager. On Debian/Ubuntu, runs `apt-get update` before installation. On RHEL-based systems, automatically handles the EPEL repository. Exits gracefully if htop is already installed.
 
-## Script
-
-- [`install-htop.sh`](./install-htop.sh)
-
-## Description
-
-This script automates the installation of htop on RHEL/CentOS/Fedora-based systems. It handles EPEL repository installation if needed and provides clear status messages throughout the installation process.
-
-## What it does
-
-- Automatic EPEL repository configuration
-- Checks for existing installation to avoid duplication
-- Supports both dnf and yum package managers
-- Error handling and validation
+| Without this script | With this script |
+|---------|-------------|
+| `sudo apt install htop` (Debian) or `sudo dnf install htop` (RHEL) | `./install-htop.sh` (works on any distro) |
+| Handle EPEL manually (RHEL) | Auto-detects and handles EPEL |
+| Check if already installed | Exits gracefully if present |
+| Remember distro-specific commands | One command for all distros |
 
 ## Usage
 
@@ -28,27 +19,16 @@ This script automates the installation of htop on RHEL/CentOS/Fedora-based syste
 
 The script will:
 1. Check if htop is already installed
-2. Install EPEL repository if not present
-3. Install htop via dnf or yum
+2. Detect your Linux distribution
+3. Install htop via apt (Debian/Ubuntu), dnf/yum (RHEL), or pacman (Arch)
 4. Verify successful installation
 
+## Supported Distributions
+- Debian/Ubuntu (apt)
+- RHEL/CentOS/Fedora (dnf/yum with EPEL)
+- Arch Linux (pacman)
+
 ## Requirements
-
-- RHEL/CentOS/Fedora-based Linux distribution
+- Linux distribution (see supported list)
 - sudo privileges
-- Internet connection for package download
-
-## Example Output
-
-```
-Info: Installing htop...
-Info: Installing EPEL repository...
-Info: Installing htop...
-Success: htop installed successfully (htop 3.x.x)
-```
-
-## Notes
-
-- The script requires sudo access to install system packages
-- EPEL (Extra Packages for Enterprise Linux) repository is required for htop on RHEL-based systems
-- If htop is already installed, the script will exit gracefully without reinstalling
+- Internet connection

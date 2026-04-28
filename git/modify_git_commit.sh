@@ -61,6 +61,12 @@ fi
 
 COMMIT_HASH=$1
 
+# Validate commit hash format
+if ! [[ "$COMMIT_HASH" =~ ^[0-9a-fA-F]+$ ]]; then
+    printf '%sError:%s Commit hash must be a valid hex string.\n' "$COLOR_RED" "$COLOR_RESET"
+    exit 1
+fi
+
 # Determine what to update
 if [ $DATE_SPECIFIED -eq 0 ]; then
     if [ -n "$NEW_MESSAGE" ]; then
@@ -82,17 +88,17 @@ fi
 
 if [ $VERBOSE -eq 1 ]; then echo "Checking if commit exists..."; fi
 # Check if the commit exists
-if ! git cat-file -e $COMMIT_HASH^{commit} 2>/dev/null; then
+if ! git cat-file -e "${COMMIT_HASH}^{commit}" 2>/dev/null; then
     printf '%sError:%s Commit %s does not exist.\n' "$COLOR_RED" "$COLOR_RESET" "$COMMIT_HASH"
     exit 1
 fi
 
-COMMIT_BRANCHES=$(git branch --contains $COMMIT_HASH | sed 's/*//' | tr -d ' ' | tr '\n' ' ')
+COMMIT_BRANCHES=$(git branch --contains "$COMMIT_HASH" | sed 's/*//' | tr -d ' ' | tr '\n' ' ')
 if [ $VERBOSE -eq 1 ]; then echo "Commit found in branch(es): $COMMIT_BRANCHES"; fi
 
 if [ $VERBOSE -eq 1 ]; then echo "Determining commit range..."; fi
 # Get the parent of the commit to determine the range
-PARENT=$(git rev-parse $COMMIT_HASH^ 2>/dev/null)
+PARENT=$(git rev-parse "${COMMIT_HASH}^" 2>/dev/null)
 if [ $? -ne 0 ]; then
     # If no parent (root commit), use --all
     RANGE="--all"
@@ -123,7 +129,7 @@ fi' \
 else
     cat
 fi' \
-        $RANGE
+        "$RANGE"
 elif [ -n "$NEW_MESSAGE" ]; then
     # Update message only
     NEW_MESSAGE_VALUE="$NEW_MESSAGE" \
@@ -133,7 +139,7 @@ elif [ -n "$NEW_MESSAGE" ]; then
 else
     cat
 fi' \
-        $RANGE
+        "$RANGE"
 elif [ -n "$NEW_DATE" ]; then
     # Update date only
     NEW_DATE_VALUE="$NEW_DATE" \
@@ -142,11 +148,11 @@ elif [ -n "$NEW_DATE" ]; then
     export GIT_AUTHOR_DATE="$NEW_DATE_VALUE"
     export GIT_COMMITTER_DATE="$NEW_DATE_VALUE"
 fi' \
-        $RANGE
+        "$RANGE"
 fi
 
 printf '%sCommit %s has been updated.%s\n' "$COLOR_GREEN" "$COMMIT_HASH" "$COLOR_RESET"
-printf 'New commit hash: %s\n' "$(git rev-parse $COMMIT_HASH)"
+printf 'New commit hash: %s\n' "$(git rev-parse "$COMMIT_HASH")"
 if [ -n "$NEW_DATE" ]; then
     printf 'New date: %s\n' "$NEW_DATE"
 fi

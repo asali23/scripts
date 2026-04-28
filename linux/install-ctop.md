@@ -1,91 +1,49 @@
 # ctop Installer
 
-## Purpose
-The purpose of this script is to automate the installation of ctop, a popular tool for monitoring container metrics, while ensuring security through checksum verification.
+Automate installation of ctop, a top-like interface for container metrics, with SHA256 checksum verification.
 
-Automated installation script for ctop, a top-like interface for container metrics.
+Download latest ctop release from GitHub, verify SHA256 checksum before installation, and install system-wide (requires sudo) or user-level (no sudo). Detects existing installations and skips if already present. Provides uninstall functionality.
 
-## Script
-
-- [`install-ctop.sh`](./install-ctop.sh)
-
-## Description
-
-This script downloads and installs ctop from the official GitHub releases. It supports both system-wide and user-level installation, includes SHA256 checksum verification for security, and provides uninstall functionality.
-
-## What it does
-
-- x86_64 architecture support
-- SHA256 checksum verification for security
-- User-level installation (no sudo required)
-- System-wide installation option
-- Smart version checking
-- Uninstall functionality
-- Automatic latest version detection from GitHub releases
+| Without this script | With this script |
+|---------|-------------|
+| Visit GitHub releases, download manually | `./install-ctop.sh` |
+| Verify checksum manually | SHA256 verified automatically |
+| `chmod +x`, move to PATH | Installed to system or user location |
+| No uninstall path | `./install-ctop.sh --uninstall` |
 
 ## Usage
 
-### Basic Installation (System-wide)
-
 ```bash
+# System-wide (requires sudo)
 ./install-ctop.sh
-```
 
-### User Installation (No sudo required)
-
-```bash
+# User-level (no sudo required)
 ./install-ctop.sh --user
-```
 
-### Uninstall
-
-```bash
+# Uninstall
 ./install-ctop.sh --uninstall
-```
 
-### Show Help
-
-```bash
+# Show help
 ./install-ctop.sh --help
 ```
 
 ## Options
-
-- `-h, --help` - Show help message
-- `-u, --user` - Install to user directory (~/.local/bin) without sudo
-- `--uninstall` - Uninstall ctop
+- `-h`, `--help` – show help
+- `-u`, `--user` – install to `~/.local/bin` without sudo
+- `--uninstall` – remove ctop
 
 ## Installation Locations
 
-- **System-wide**: `/usr/local/bin/ctop` (requires sudo)
-- **User-level**: `~/.local/bin/ctop` (no sudo required)
+- System: `/usr/local/bin/ctop` (requires sudo)
+- User: `~/.local/bin/ctop` – ensure this directory is in your PATH
+
+Auto-detects the latest version from GitHub releases.
 
 ## Requirements
-
 - x86_64 architecture
-- curl or wget for downloading
+- curl
 - Internet connection
-- sudo privileges (for system-wide installation only)
-
-## Example Output
-
-```
-[INFO] Detecting architecture...
-[INFO] Fetching latest ctop release...
-[INFO] Latest version: v0.7.7
-[INFO] Downloading ctop...
-[INFO] Verifying checksum...
-[SUCCESS] Checksum verification passed
-[INFO] Installing to /usr/local/bin/ctop...
-[SUCCESS] ctop v0.7.7 installed successfully!
-```
+- sudo (for system-wide only)
 
 ## Security
-
-The script verifies the SHA256 checksum of the downloaded binary to ensure integrity and authenticity before installation.
-
-## Notes
-
-- For user installation, ensure `~/.local/bin` is in your PATH
-- The script automatically detects the latest version from GitHub releases
-- ctop provides a real-time overview of Docker and other container metrics
+Verifies SHA256 checksum of the downloaded binary before installation.

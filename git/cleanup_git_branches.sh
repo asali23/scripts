@@ -18,20 +18,26 @@ setup_git_alias() {
 
 # Parse command line arguments
 AUTO_YES=false
+DRY_RUN=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         -y|--yes)
             AUTO_YES=true
             shift
             ;;
+        -n|--dry-run)
+            DRY_RUN=true
+            shift
+            ;;
         -h|--help)
-            echo "Usage: $0 [-y|--yes] [-h|--help]"
+            echo "Usage: $0 [-y|--yes] [-n|--dry-run] [-h|--help]"
             echo ""
             echo "Delete local branches that have been deleted on remote."
             echo ""
             echo "Options:"
-            echo "  -y, --yes    Skip all prompts and auto-setup git alias if missing"
-            echo "  -h, --help   Show this help message"
+            echo "  -y, --yes       Skip all prompts and auto-setup git alias if missing"
+            echo "  -n, --dry-run   Show what would be deleted without actually deleting"
+            echo "  -h, --help      Show this help message"
             exit 0
             ;;
         *)
@@ -76,7 +82,7 @@ fi
 
 # Prune remote tracking branches first
 echo "=== Pruning remote-tracking branches ==="
-git remote | xargs -n 1 git remote prune
+git remote | xargs -r -n 1 git remote prune
 
 echo ""
 echo "=== Analyzing local branches ==="
@@ -104,7 +110,14 @@ echo "$gone_branches" | while IFS= read -r line; do
     echo ""
 done
 
-# Add confirmation prompt (unless auto-yes is enabled)
+# Add confirmation prompt (unless auto-yes or dry-run is enabled)
+if [ "$DRY_RUN" = true ]; then
+    echo "=== DRY RUN MODE ==="
+    branch_count=$(echo "$gone_branches" | wc -l)
+    echo "Would delete $branch_count local branch(es) (no changes made)"
+    exit 0
+fi
+
 if [ "$AUTO_YES" = false ]; then
     echo "=== Confirmation ==="
     branch_count=$(echo "$gone_branches" | wc -l)

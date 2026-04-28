@@ -7,6 +7,12 @@
 
 set -e
 
+# Check for required dependencies
+if ! command -v bc >/dev/null 2>&1; then
+    echo "Error: 'bc' is required but not installed."
+    exit 1
+fi
+
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 <image_name[:tag]> [--json]"
   exit 1
